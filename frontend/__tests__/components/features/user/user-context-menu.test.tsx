@@ -10,6 +10,7 @@ import {
   INITIAL_MOCK_ORGS,
   MOCK_PERSONAL_ORG,
   MOCK_TEAM_ORG_ACME,
+  MOCK_ROLE_PERMISSIONS,
 } from "#/mocks/org-handlers";
 import AuthService from "#/api/auth-service/auth-service.api";
 import { SAAS_NAV_ITEMS, OSS_NAV_ITEMS } from "#/constants/settings-nav";
@@ -36,7 +37,6 @@ import * as breakpoint from "#/hooks/use-breakpoint";
 type UserContextMenuProps = GetComponentPropTypes<typeof UserContextMenu>;
 
 function UserContextMenuWithRootOutlet({
-  type,
   onClose,
   onOpenInviteModal,
   onOpenCreateOrganizationModal,
@@ -46,7 +46,6 @@ function UserContextMenuWithRootOutlet({
     <div>
       <div data-testid="portal-root" id="portal-root" />
       <UserContextMenu
-        type={type}
         onClose={onClose}
         onOpenInviteModal={onOpenInviteModal}
         onOpenCreateOrganizationModal={onOpenCreateOrganizationModal}
@@ -57,7 +56,6 @@ function UserContextMenuWithRootOutlet({
 }
 
 const renderUserContextMenu = ({
-  type,
   onClose,
   onOpenInviteModal,
   onOpenCreateOrganizationModal,
@@ -65,7 +63,6 @@ const renderUserContextMenu = ({
 }: UserContextMenuProps) =>
   render(
     <UserContextMenuWithRootOutlet
-      type={type}
       onClose={onClose}
       onOpenInviteModal={onOpenInviteModal}
       onOpenCreateOrganizationModal={onOpenCreateOrganizationModal}
@@ -110,6 +107,7 @@ const createMockUser = (
   llm_model: "gpt-4",
   llm_base_url: "",
   status: "active",
+  permissions: MOCK_ROLE_PERMISSIONS[overrides.role ?? "member"],
   ...overrides,
 });
 
@@ -161,7 +159,7 @@ describe("UserContextMenu", () => {
       createMockWebClientConfig({ app_mode: "saas" }),
     );
 
-    renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+    renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
     screen.getByTestId("org-selector");
 
@@ -199,7 +197,7 @@ describe("UserContextMenu", () => {
       }),
     );
 
-    renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+    renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
     // In SaaS, personal LLM/Condenser/Verification routes are hidden in favor
     // of /settings/org-defaults/* (visible only when an org is selected, which
@@ -260,7 +258,7 @@ describe("UserContextMenu", () => {
 
     seedActiveUser({ role: "admin" });
 
-    renderUserContextMenu({ type: "admin", onClose: vi.fn, onOpenInviteModal: vi.fn });
+    renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
     // Wait for config to load and verify that navigation items are rendered (except organization-members/org which are filtered out)
     // The Agent Context and Agent Profiles pages (OHE-3456) stay hidden
@@ -286,14 +284,14 @@ describe("UserContextMenu", () => {
   });
 
   it("should not display Organization Members menu item for regular users (filtered out)", () => {
-    renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+    renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
     // Organization Members is filtered out from nav items for all users
     expect(screen.queryByText("Organization Members")).not.toBeInTheDocument();
   });
 
   it("should render a documentation link", () => {
-    renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+    renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
     const docsLink = screen.getByText("SIDEBAR$DOCS").closest("a");
     expect(docsLink).toHaveAttribute("href", "https://docs.openhands.dev");
@@ -321,7 +319,7 @@ describe("UserContextMenu", () => {
     });
 
     it("should render OSS_NAV_ITEMS when in OSS mode", async () => {
-      renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+      renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
       // Wait for the config to load and OSS nav items to appear
       await waitFor(() => {
@@ -337,7 +335,7 @@ describe("UserContextMenu", () => {
     });
 
     it("should not display Organization Members menu item in OSS mode", async () => {
-      renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+      renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
       // Wait for the config to load
       await waitFor(() => {
@@ -351,7 +349,7 @@ describe("UserContextMenu", () => {
     });
 
     it("should not display logout button in OSS mode", async () => {
-      renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+      renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
       // Wait for the config to load
       await waitFor(() => {
@@ -384,7 +382,7 @@ describe("UserContextMenu", () => {
         }),
       );
 
-      renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+      renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
       await waitFor(() => {
         // Other nav items should still be visible
@@ -423,7 +421,7 @@ describe("UserContextMenu", () => {
         organizationId: MOCK_PERSONAL_ORG.id,
       });
 
-      renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+      renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
       await waitFor(() => {
         expect(
@@ -449,7 +447,7 @@ describe("UserContextMenu", () => {
       createMockUser({ role: "admin", org_id: MOCK_TEAM_ORG_ACME.id }),
     );
 
-    renderUserContextMenu({ type: "admin", onClose: vi.fn, onOpenInviteModal: vi.fn });
+    renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
     screen.getByTestId("org-selector");
     // Wait for orgs to load so org management items appear
@@ -458,6 +456,32 @@ describe("UserContextMenu", () => {
     });
     // Note: Organization and Org Members links may or may not appear depending on
     // permission checks in useSettingsNavItems. The key test is that Invite button appears.
+  });
+
+  it("hides the invite button when /me lacks invite_user_to_organization, whatever the role", async () => {
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+      createMockWebClientConfig({ app_mode: "saas" }),
+    );
+    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+      items: [MOCK_TEAM_ORG_ACME],
+      currentOrgId: MOCK_TEAM_ORG_ACME.id,
+    });
+    useSelectedOrganizationStore.setState({
+      organizationId: MOCK_TEAM_ORG_ACME.id,
+    });
+    const getMeSpy = vi.spyOn(organizationService, "getMe").mockResolvedValue(
+      createMockUser({
+        role: "admin",
+        permissions: [],
+        org_id: MOCK_TEAM_ORG_ACME.id,
+      }),
+    );
+
+    renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
+
+    await waitFor(() => expect(getMeSpy).toHaveBeenCalled());
+    await screen.findByText("ACCOUNT_SETTINGS$LOGOUT");
+    expect(screen.queryByText("ORG$INVITE_ORG_MEMBERS")).not.toBeInTheDocument();
   });
 
   it("should render additional context items when user is an owner", async () => {
@@ -476,7 +500,7 @@ describe("UserContextMenu", () => {
       createMockUser({ role: "owner", org_id: MOCK_TEAM_ORG_ACME.id }),
     );
 
-    renderUserContextMenu({ type: "owner", onClose: vi.fn, onOpenInviteModal: vi.fn });
+    renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
     screen.getByTestId("org-selector");
     // Wait for orgs to load so org management items appear
@@ -493,7 +517,7 @@ describe("UserContextMenu", () => {
     );
 
     const logoutSpy = vi.spyOn(AuthService, "logout");
-    renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+    renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
     // Wait for config to load so logout button appears
     const logoutButton = await screen.findByText("ACCOUNT_SETTINGS$LOGOUT");
@@ -522,7 +546,7 @@ describe("UserContextMenu", () => {
 
     seedActiveUser({ role: "admin" });
 
-    renderUserContextMenu({ type: "admin", onClose: vi.fn, onOpenInviteModal: vi.fn });
+    renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
     // Wait for config to load and test a few representative nav items have the correct href
     await waitFor(() => {
@@ -562,7 +586,7 @@ describe("UserContextMenu", () => {
       createMockUser({ role: "admin", org_id: MOCK_TEAM_ORG_ACME.id }),
     );
 
-    renderUserContextMenu({ type: "admin", onClose: vi.fn, onOpenInviteModal: vi.fn });
+    renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
     // Wait for nav items to load. The Org Members link may appear if permissions are met.
     await waitFor(() => {
@@ -592,7 +616,7 @@ describe("UserContextMenu", () => {
       createMockUser({ role: "admin", org_id: MOCK_TEAM_ORG_ACME.id }),
     );
 
-    renderUserContextMenu({ type: "admin", onClose: vi.fn, onOpenInviteModal: vi.fn });
+    renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
     // Wait for nav items to load. The Organization link may appear if permissions are met.
     await waitFor(() => {
@@ -605,7 +629,7 @@ describe("UserContextMenu", () => {
 
   it("should call the onClose handler when clicking outside the context menu", async () => {
     const onCloseMock = vi.fn();
-    renderUserContextMenu({ type: "member", onClose: onCloseMock, onOpenInviteModal: vi.fn });
+    renderUserContextMenu({ onClose: onCloseMock, onOpenInviteModal: vi.fn });
 
     const contextMenu = screen.getByTestId("user-context-menu");
     await userEvent.click(contextMenu);
@@ -631,7 +655,7 @@ describe("UserContextMenu", () => {
     seedActiveUser({ role: "owner" });
 
     const onCloseMock = vi.fn();
-    renderUserContextMenu({ type: "owner", onClose: onCloseMock, onOpenInviteModal: vi.fn });
+    renderUserContextMenu({ onClose: onCloseMock, onOpenInviteModal: vi.fn });
 
     // Wait for config to load so logout button appears
     const logoutButton = await screen.findByText("ACCOUNT_SETTINGS$LOGOUT");
@@ -661,6 +685,7 @@ describe("UserContextMenu", () => {
         user_id: "99",
         email: "me@test.com",
         role: "admin",
+        permissions: MOCK_ROLE_PERMISSIONS.admin,
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
@@ -671,7 +696,7 @@ describe("UserContextMenu", () => {
       // Pre-select the personal org in the Zustand store
       useSelectedOrganizationStore.setState({ organizationId: "1" });
 
-      renderUserContextMenu({ type: "admin", onClose: vi.fn, onOpenInviteModal: vi.fn });
+      renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
       // Wait for org selector to load and org management buttons to disappear
       // (they disappear when personal org is selected)
@@ -696,6 +721,7 @@ describe("UserContextMenu", () => {
         user_id: "99",
         email: "me@test.com",
         role: "admin",
+        permissions: MOCK_ROLE_PERMISSIONS.admin,
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
@@ -703,7 +729,7 @@ describe("UserContextMenu", () => {
         status: "active",
       });
 
-      renderUserContextMenu({ type: "admin", onClose: vi.fn, onOpenInviteModal: vi.fn });
+      renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
       // Wait for org selector to load and billing to disappear
       // (billing disappears when team org is selected)
@@ -716,6 +742,10 @@ describe("UserContextMenu", () => {
   });
 
   it("should call onOpenInviteModal and onClose when Invite Organization Member is clicked", async () => {
+    // SaaS mode loads /me, whose permissions gate the invite button
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+      createMockWebClientConfig({ app_mode: "saas" }),
+    );
     // Mock a team org so org management items are visible (not personal org)
     vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
       items: [MOCK_TEAM_ORG_ACME],
@@ -731,7 +761,6 @@ describe("UserContextMenu", () => {
     const onCloseMock = vi.fn();
     const onOpenInviteModalMock = vi.fn();
     renderUserContextMenu({
-      type: "admin",
       onClose: onCloseMock,
       onOpenInviteModal: onOpenInviteModalMock,
     });
@@ -765,7 +794,6 @@ describe("UserContextMenu", () => {
     const onOpenPreviewModalMock = vi.fn();
     const onOpenCreateOrganizationModalMock = vi.fn();
     renderUserContextMenu({
-      type: "member",
       onClose: onCloseMock,
       onOpenInviteModal: vi.fn(),
       onOpenCreateOrganizationModal: onOpenCreateOrganizationModalMock,
@@ -808,7 +836,6 @@ describe("UserContextMenu", () => {
     const onOpenPreviewModalMock = vi.fn();
     const onOpenCreateOrganizationModalMock = vi.fn();
     renderUserContextMenu({
-      type: "member",
       onClose: vi.fn(),
       onOpenInviteModal: vi.fn(),
       onOpenCreateOrganizationModal: onOpenCreateOrganizationModalMock,
@@ -853,7 +880,6 @@ describe("UserContextMenu", () => {
     const onOpenPreviewModalMock = vi.fn();
     const onOpenCreateOrganizationModalMock = vi.fn();
     renderUserContextMenu({
-      type: "admin",
       onClose: onCloseMock,
       onOpenInviteModal: vi.fn(),
       onOpenCreateOrganizationModal: onOpenCreateOrganizationModalMock,
@@ -891,7 +917,6 @@ describe("UserContextMenu", () => {
     const onOpenPreviewModalMock = vi.fn();
     const onOpenCreateOrganizationModalMock = vi.fn();
     renderUserContextMenu({
-      type: "admin",
       onClose: onCloseMock,
       onOpenInviteModal: vi.fn(),
       onOpenCreateOrganizationModal: onOpenCreateOrganizationModalMock,
@@ -940,7 +965,6 @@ describe("UserContextMenu", () => {
     });
 
     renderUserContextMenu({
-      type: "admin",
       onClose: vi.fn(),
       onOpenInviteModal: vi.fn(),
     });
@@ -961,7 +985,6 @@ describe("UserContextMenu", () => {
     });
 
     renderUserContextMenu({
-      type: "admin",
       onClose: vi.fn(),
       onOpenInviteModal: vi.fn(),
     });
@@ -1000,7 +1023,7 @@ describe("UserContextMenu", () => {
 
     const user = userEvent.setup();
     const onCloseMock = vi.fn();
-    renderUserContextMenu({ type: "member", onClose: onCloseMock, onOpenInviteModal: vi.fn });
+    renderUserContextMenu({ onClose: onCloseMock, onOpenInviteModal: vi.fn });
 
     // Wait for org selector to appear (it may take a moment for config to load)
     const orgSelector = await screen.findByTestId("org-selector");
@@ -1048,7 +1071,7 @@ describe("UserContextMenu", () => {
         }),
       );
 
-      renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+      renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
       await waitFor(() => {
         expect(screen.getByTestId("context-menu-cta")).toBeInTheDocument();
@@ -1062,7 +1085,7 @@ describe("UserContextMenu", () => {
         createMockWebClientConfig({ app_mode: "oss" }),
       );
 
-      renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+      renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
       await waitFor(() => {
         expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
@@ -1091,7 +1114,7 @@ describe("UserContextMenu", () => {
       // Set mobile mode
       vi.mocked(breakpoint.useBreakpoint).mockReturnValue(true);
 
-      renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+      renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
       await waitFor(() => {
         expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
@@ -1119,7 +1142,7 @@ describe("UserContextMenu", () => {
         }),
       );
 
-      renderUserContextMenu({ type: "member", onClose: vi.fn, onOpenInviteModal: vi.fn });
+      renderUserContextMenu({ onClose: vi.fn, onOpenInviteModal: vi.fn });
 
       await waitFor(() => {
         expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
