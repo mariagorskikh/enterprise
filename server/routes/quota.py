@@ -369,3 +369,49 @@ async def set_org_quota(
             org_name=org.name,
             daily_sandbox_limit=org.daily_sandbox_limit,
         )
+
+
+class UserQuotaResponse(BaseModel):
+    user_id: str
+    account_type: str
+    daily_sandbox_limit: int | None
+
+
+@quota_admin_router.put('/users/{user_id}/quota', response_model=UserQuotaResponse)
+async def set_user_quota(
+    user_id: UUID,
+    body: OrgQuotaUpdateRequest,
+    caller_user_id: str = Depends(require_permission(Permission.MANAGE_ORG_QUOTA)),
+) -> UserQuotaResponse:
+    """Set or clear a user-level daily sandbox limit override.
+
+    Used for service accounts, whose runs count against their own quota. The
+    user limit takes precedence over the org limit. Same permission and value
+    rules as ``set_org_quota``: -1 exempts the user, NULL inherits the org
+    limit or the deployment default, a positive integer is the limit.
+    """
+    async with a_session_maker() as session:
+        user = await session.scalar(select(User).where(User.id == user_id))
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail='User not found',
+            )
+        user.daily_sandbox_limit = body.daily_sandbox_limit
+        await session.commit()
+
+        logger.info(
+            'user_quota:set',
+            extra={
+                'caller_user_id': caller_user_id,
+                'user_id': str(user.id),
+                'daily_sandbox_limit': user.daily_sandbox_limit,
+                'exempt': user.daily_sandbox_limit == EXEMPT_LIMIT,
+            },
+        )
+
+        return UserQuotaResponse(
+            user_id=str(user.id),
+            account_type=user.account_type,
+            daily_sandbox_limit=user.daily_sandbox_limit,
+        )
