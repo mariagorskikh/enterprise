@@ -53,7 +53,7 @@ from storage.database import a_session_maker
 from storage.org_store import OrgStore
 from storage.saas_secrets_store import SaasSecretsStore
 from storage.saas_settings_store import SaasSettingsStore
-from storage.user import User
+from storage.user import ACCOUNT_TYPE_SERVICE, User
 from storage.user_authorization import UserAuthorizationType
 from storage.user_authorization_store import UserAuthorizationStore
 from storage.user_store import UserStore
@@ -107,6 +107,9 @@ class SaasUserAuth(UserAuth):
     _secrets: Secrets | None = None
     accepted_tos: bool | None = None
     auth_type: AuthType = AuthType.COOKIE
+    # ``user.account_type`` (``human`` or ``service``), read when the API key
+    # was validated. Cookie sessions are always human.
+    account_type: str = 'human'
     _active_user_validated: bool = field(default=False, repr=False)
     # OAuth v2 (Phase 2) cookie session. When True, the instance was minted
     # from the small ``openhands_auth`` JWT cookie and resolves tokens via the
@@ -157,6 +160,9 @@ class SaasUserAuth(UserAuth):
     # needed to distinguish "not yet computed" from "computed and None".
     _effective_org_id: UUID | None = None
     _effective_org_id_resolved: bool = False
+
+    def is_service_account(self) -> bool:
+        return self.account_type == ACCOUNT_TYPE_SERVICE
 
     def get_api_key_org_id(self) -> UUID | None:
         """Get the organization ID bound to the API key used for authentication.
@@ -1342,7 +1348,7 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
         validation_result = await api_key_store.validate_api_key(api_key)
         if not validation_result:
             return None
-        await _require_active_user(validation_result.user_id)
+        user = await _require_active_user(validation_result.user_id)
         # A key bound to an org the user is not a member of (e.g. removed
         # since the key was minted) does not authenticate. Super roles are
         # exempt: they may bind keys to orgs they have not joined (see
@@ -1371,6 +1377,7 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
             user_id=validation_result.user_id,
             refresh_token=SecretStr(''),
             auth_type=AuthType.BEARER,
+            account_type=user.account_type,
             api_key_org_id=validation_result.org_id,
             api_key_id=validation_result.key_id,
             api_key_name=validation_result.key_name,
