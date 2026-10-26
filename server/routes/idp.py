@@ -100,7 +100,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, EmailStr, field_validator
 
 from openhands.app_server.settings.settings_models import agent_llm
-from openhands.app_server.user_auth import get_user_id
+from openhands.app_server.user_auth import get_user_id, reject_service_account
 from openhands.app_server.utils.logger import openhands_logger as logger
 from server.auth.authorization import Permission, authorize_permission
 from server.auth.oauth_v2_refresh import (
@@ -1283,7 +1283,7 @@ def _idp_password_router() -> APIRouter:
             content={'has_password': has_password},
         )
 
-    @router.post('/password')
+    @router.post('/password', dependencies=[Depends(reject_service_account)])
     async def idp_set_password(
         request: Request,
         body: SetPasswordRequest,
