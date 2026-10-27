@@ -21,6 +21,7 @@ from server.services.quota_increase_request_service import (
 )
 from storage.database import a_session_maker
 from storage.org import Org
+from storage.org_member import OrgMember
 from storage.user import User
 
 quota_router = APIRouter(
@@ -382,6 +383,7 @@ async def set_user_quota(
     user_id: UUID,
     body: OrgQuotaUpdateRequest,
     caller_user_id: str = Depends(require_permission(Permission.MANAGE_ORG_QUOTA)),
+    effective_org_id: UUID = EFFECTIVE_ORG_ID,
 ) -> UserQuotaResponse:
     """Set or clear a user-level daily sandbox limit override.
 
@@ -389,9 +391,17 @@ async def set_user_quota(
     user limit takes precedence over the org limit. Same permission and value
     rules as ``set_org_quota``: -1 exempts the user, NULL inherits the org
     limit or the deployment default, a positive integer is the limit.
+
+    The user must be a member of the request's effective org (API-key
+    binding or ``X-Org-Id``). Any other user is a 404, so the route does not
+    reveal users of other orgs.
     """
     async with a_session_maker() as session:
-        user = await session.scalar(select(User).where(User.id == user_id))
+        user = await session.scalar(
+            select(User)
+            .join(OrgMember, OrgMember.user_id == User.id)
+            .where(User.id == user_id, OrgMember.org_id == effective_org_id)
+        )
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
