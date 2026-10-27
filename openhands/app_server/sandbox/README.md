@@ -264,7 +264,7 @@ agent: a Firecracker micro-VM with its own HTTPS and WebSocket URL,
 
 | Variable | Purpose |
 | --- | --- |
-| `MARITIME_API_KEY` | **Required.** A Maritime API key (`mk_...`) with the `provision` and `deploy` scopes |
+| `MARITIME_API_KEY` | **Required.** A Maritime API key (`mk_...`) with the `provision`, `deploy` and `manage` scopes (`manage` is what deletes an agent) |
 | `MARITIME_API_URL` | Maritime API. Defaults to `https://api.maritime.sh` |
 | `MARITIME_IMAGE` | Image each agent runs. Defaults to `ghcr.io/maritime-sh/openhands-agent-server:<installed agent server version>` |
 | `MARITIME_MEM_MB`, `MARITIME_VCPUS` | Size of each micro-VM. Default 4096 MB and 2 vCPUs, within the plan's bounds |
@@ -280,7 +280,9 @@ which publishes a tag for each agent server release.
 `start_sandbox` creates an agent with `publicWeb` on, so the browser and the
 app server reach its URL without a Maritime login, and boots the agent server
 dormant (`OH_DEFERRED_INIT=1`). It waits for the agent to become `active`,
-then completes the same `POST /api/init` handshake as E2B. A fresh random
+then completes the same `POST /api/init` handshake as E2B. The app's origins (`OH_WEB_URL` and the permitted CORS origins) go in as
+`OH_ALLOW_CORS_ORIGINS_<n>` env at create, because the agent server reads its
+CORS policy at boot and ignores the origins sent later on `/api/init`. A fresh random
 session API key is the agent's secret `OH_SECRET_KEY`, so it is also the init
 key and the agent server's secret key; that is what lets `resume_sandbox`
 claim an agent server that booted dormant again after a cold restart, and

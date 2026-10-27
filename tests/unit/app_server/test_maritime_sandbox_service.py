@@ -426,6 +426,42 @@ class TestStartSandbox:
         assert env['OH_SECRET_KEY']['isSecret'] is True
 
     @pytest.mark.asyncio
+    async def test_cors_origins_are_boot_env(self, db_session):
+        """The agent server reads CORS at boot, not from /api/init."""
+        maritime = FakeMaritime()
+        service = _service(db_session, maritime)
+        service.permitted_cors_origins = ['https://other.example.com', WEB_URL]
+
+        await service.start_sandbox()
+
+        env = {
+            item['key']: item
+            for item in maritime.created[0]['initialEnvVars']
+            if item['key'].startswith('OH_ALLOW_CORS_ORIGINS_')
+        }
+        assert env == {
+            'OH_ALLOW_CORS_ORIGINS_0': {
+                'key': 'OH_ALLOW_CORS_ORIGINS_0',
+                'value': WEB_URL,
+                'isSecret': False,
+            },
+            'OH_ALLOW_CORS_ORIGINS_1': {
+                'key': 'OH_ALLOW_CORS_ORIGINS_1',
+                'value': 'https://other.example.com',
+                'isSecret': False,
+            },
+        }
+
+    @pytest.mark.asyncio
+    async def test_no_cors_env_without_origins(self, db_session):
+        maritime = FakeMaritime()
+
+        await _service(db_session, maritime, web_url=None).start_sandbox()
+
+        keys = [item['key'] for item in maritime.created[0]['initialEnvVars']]
+        assert keys == ['OH_DEFERRED_INIT', 'OH_SECRET_KEY']
+
+    @pytest.mark.asyncio
     async def test_each_sandbox_gets_its_own_key_and_name(self, db_session):
         maritime = FakeMaritime()
         service = _service(db_session, maritime)

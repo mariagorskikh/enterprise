@@ -74,7 +74,7 @@ STATUS_MAPPING = {
 
 MARITIME_AUTH_FAILURE = (
     'Maritime rejected the API key. Check MARITIME_API_KEY: it must be a '
-    'Maritime API key (mk_...) with the provision and deploy scopes.'
+    'Maritime API key (mk_...) with the provision, deploy and manage scopes.'
 )
 MARITIME_PLAN_LIMIT = (
     'The Maritime plan has no room for another awake agent. Pause or delete an '
@@ -411,11 +411,34 @@ class MaritimeSandboxService(ManagedSandboxService):
             'initialEnvVars': [
                 {'key': 'OH_DEFERRED_INIT', 'value': '1', 'isSecret': False},
                 {'key': 'OH_SECRET_KEY', 'value': session_api_key, 'isSecret': True},
+                *self._cors_env(),
             ],
         }
         if sandbox_spec.disk_gb is not None:
             body['diskGb'] = sandbox_spec.disk_gb
         return body
+
+    def _cors_origins(self) -> list[str]:
+        origins = [self.web_url] if self.web_url else []
+        origins.extend(self.permitted_cors_origins)
+        return list(dict.fromkeys(origins))
+
+    def _cors_env(self) -> list[dict[str, Any]]:
+        """The app's origins as boot env for the agent server's CORS policy.
+
+        The agent server builds its CORS middleware when it starts, so the
+        ``allow_cors_origins`` it is sent later on ``POST /api/init`` never
+        reaches it. Maritime sets env at boot, so the browser's preflight to
+        the agent URL passes from the first request.
+        """
+        return [
+            {
+                'key': f'OH_ALLOW_CORS_ORIGINS_{index}',
+                'value': origin,
+                'isSecret': False,
+            }
+            for index, origin in enumerate(self._cors_origins())
+        ]
 
     async def start_sandbox(
         self,
@@ -642,12 +665,9 @@ class MaritimeSandboxService(ManagedSandboxService):
         if extra_env:
             body['env'].update(extra_env)
 
-        cors_origins = []
-        if self.web_url:
-            cors_origins.append(self.web_url)
-        cors_origins.extend(self.permitted_cors_origins)
+        cors_origins = self._cors_origins()
         if cors_origins:
-            body['allow_cors_origins'] = list(dict.fromkeys(cors_origins))
+            body['allow_cors_origins'] = cors_origins
 
         if self.web_url and 'localhost' not in self.web_url:
             body['webhooks'] = [{'base_url': f'{self.web_url}/api/v1/webhooks'}]
@@ -767,7 +787,7 @@ class MaritimeSandboxServiceInjector(ManagedSandboxServiceInjector):
     api_key: str = Field(
         default_factory=lambda: os.getenv('MARITIME_API_KEY', ''),
         description=(
-            'The Maritime API key (mk_...), with the provision and deploy '
+            'The Maritime API key (mk_...), with the provision, deploy and manage '
             'scopes. Defaults to the MARITIME_API_KEY env var.'
         ),
     )
