@@ -9,13 +9,14 @@ Since agents can do things that may harm your system, they are typically run ins
 ## Key Components
 
 - **SandboxService**: Abstract service for sandbox lifecycle management
-- **ManagedSandboxService**: The base for the Docker, E2B and k8s agent-sandbox
-  services. It owns each sandbox's row, and each backend implements only the
+- **ManagedSandboxService**: The base for the Docker, E2B, k8s agent-sandbox
+  and Maritime services. It owns each sandbox's row, and each backend implements only the
   provider calls.
 - **DockerSandboxService**: Docker-based sandbox implementation
 - **RemoteSandboxService**: Runtime-API-based sandbox implementation
 - **E2BSandboxService**: E2B microVM-based sandbox implementation
 - **K8sAgentSandboxService**: Kubernetes sandboxes claimed from an agent-sandbox warm pool
+- **MaritimeSandboxService**: Maritime agents, one Firecracker micro-VM per sandbox
 - **ProcessSandboxService**: Local process-based sandbox implementation
 - **SandboxSpecService**: Manages sandbox specifications and templates
 - **SandboxRouter**: FastAPI router for sandbox endpoints
@@ -28,12 +29,12 @@ Since agents can do things that may harm your system, they are typically run ins
 
 - Secure containerized execution environments
 - Sandbox lifecycle management (create, start, stop, destroy)
-- Multiple sandbox backend support (Docker, Remote, E2B, Kubernetes agent-sandbox, Local)
+- Multiple sandbox backend support (Docker, Remote, E2B, Kubernetes agent-sandbox, Maritime, Local)
 - User-scoped sandbox access control
 
 ## Lifecycle
 
-For Docker, E2B and Kubernetes agent-sandbox, the app pauses and deletes
+For Docker, E2B, Kubernetes agent-sandbox and Maritime, the app pauses and deletes
 sandboxes itself. (runtime-api does this for the remote backend, and the
 process backend has no lifecycle.) The background worker applies three rules:
 
@@ -67,6 +68,8 @@ What a pause does depends on the backend:
 - **E2B** pauses the microVM, with its memory and processes.
 - **Kubernetes agent-sandbox** suspends the Sandbox. The pod is deleted, and
   its volume stays.
+- **Maritime** puts the agent to sleep, which snapshots its micro-VM with its
+  memory and processes.
 
 The agent server gets `OH_RUNTIME_IDLE_TIMEOUT_SECONDS` set to `idle_seconds`,
 and caps a foreground terminal command at 90% of it (18 minutes by default), so
@@ -251,3 +254,61 @@ on the volume still decrypt.
   The app does not initialize it again until the sandbox is paused and resumed.
 - As on E2B, pods must be able to reach `OH_WEB_URL` (or
   `AGENT_SANDBOX_WEBHOOK_BASE_URL`), because there is no polling fallback.
+
+## Maritime backend
+
+`MaritimeSandboxService` runs each sandbox as a [Maritime](https://maritime.sh)
+agent: a Firecracker micro-VM with its own HTTPS and WebSocket URL,
+`https://{agent_id}.mtm.sh`, and a persistent `/data` volume. Select it with
+`RUNTIME=maritime`, which also selects `MaritimeSandboxSpecService`.
+
+| Variable | Purpose |
+| --- | --- |
+| `MARITIME_API_KEY` | **Required.** A Maritime API key (`mk_...`) with the `provision` and `deploy` scopes |
+| `MARITIME_API_URL` | Maritime API. Defaults to `https://api.maritime.sh` |
+| `MARITIME_IMAGE` | Image each agent runs. Defaults to `ghcr.io/maritime-sh/openhands-agent-server:<installed agent server version>` |
+| `MARITIME_MEM_MB`, `MARITIME_VCPUS` | Size of each micro-VM. Default 4096 MB and 2 vCPUs, within the plan's bounds |
+| `MARITIME_DISK_GB` | Size of each agent's `/data` volume. Defaults to the plan's size |
+| `MARITIME_IDLE_TTL_SECONDS` | Seconds without a request before Maritime puts an agent to sleep on its own. Defaults to `max_session_seconds` |
+
+There is no template to build. The default image is the published agent
+server with a launcher that binds `$PORT`, the port Maritime routes an agent's
+URL to; its source is
+[maritime-sh/openhands-agent-server](https://github.com/maritime-sh/openhands-agent-server),
+which publishes a tag for each agent server release.
+
+`start_sandbox` creates an agent with `publicWeb` on, so the browser and the
+app server reach its URL without a Maritime login, and boots the agent server
+dormant (`OH_DEFERRED_INIT=1`). It waits for the agent to become `active`,
+then completes the same `POST /api/init` handshake as E2B. A fresh random
+session API key is the agent's secret `OH_SECRET_KEY`, so it is also the init
+key and the agent server's secret key; that is what lets `resume_sandbox`
+claim an agent server that booted dormant again after a cold restart, and
+keeps its stored secrets readable. Ownership and the key live in the sandbox
+table; the agent's `externalId` (`openhands:{user_id}`) and `openhands-` name
+prefix tag it at Maritime.
+
+`pause_sandbox` puts the agent to sleep (`POST /api/agents/{id}/sleep`).
+`resume_sandbox` wakes it (`POST /api/agents/{id}/start`), and repeats the
+handshake only if the agent server reports `dormant`. Maritime also wakes a
+sleeping agent on the next request to its URL. `delete_sandbox` deletes the
+agent with its volume. An agent Maritime no longer has reports `MISSING`.
+
+Maritime puts an agent to sleep on its own after `MARITIME_IDLE_TTL_SECONDS`
+without an HTTP request, unless its CPU is busy. Open WebSocket frames do not
+count as requests, so this defaults to the lifecycle's max session (12 hours)
+and the lifecycle worker, which reads the agent server's own `idle_time`, does
+the pausing.
+
+### Known limitations
+
+- **One port per agent.** Maritime publishes the agent server only, so
+  VSCode and the worker ports (app previews) are not offered.
+- **`OH_WEB_URL` must be publicly reachable**, as on E2B, because there is no
+  polling fallback for agent events.
+- **Plan limits apply.** A create or wake past the plan's awake-agent limit is
+  refused with 429, reported as a `SandboxError` that says so. Keep
+  `max_num_sandboxes` at or below the plan's limit.
+- The first agent on a Maritime host converts the image to a root
+  filesystem, which can take a few minutes; `init_timeout_seconds` defaults to
+  600 for that reason. Later agents start from the cache.

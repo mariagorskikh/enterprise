@@ -289,6 +289,12 @@ def config_from_env() -> AppServerConfig:
     from openhands.app_server.sandbox.k8s_agent_sandbox_spec_service import (
         K8sAgentSandboxSpecServiceInjector,
     )
+    from openhands.app_server.sandbox.maritime_sandbox_service import (
+        MaritimeSandboxServiceInjector,
+    )
+    from openhands.app_server.sandbox.maritime_sandbox_spec_service import (
+        MaritimeSandboxSpecServiceInjector,
+    )
     from openhands.app_server.sandbox.process_sandbox_service import (
         ProcessSandboxServiceInjector,
     )
@@ -363,6 +369,8 @@ def config_from_env() -> AppServerConfig:
             config.sandbox = E2BSandboxServiceInjector()
         elif os.getenv('RUNTIME') == 'k8s-agent-sandbox':
             config.sandbox = K8sAgentSandboxServiceInjector()
+        elif os.getenv('RUNTIME') == 'maritime':
+            config.sandbox = MaritimeSandboxServiceInjector()
         elif os.getenv('RUNTIME') in ('local', 'process'):
             config.sandbox = ProcessSandboxServiceInjector()
         else:
@@ -419,6 +427,8 @@ def config_from_env() -> AppServerConfig:
             config.sandbox_spec = E2BSandboxSpecServiceInjector()
         elif os.getenv('RUNTIME') == 'k8s-agent-sandbox':
             config.sandbox_spec = K8sAgentSandboxSpecServiceInjector()
+        elif os.getenv('RUNTIME') == 'maritime':
+            config.sandbox_spec = MaritimeSandboxSpecServiceInjector()
         elif os.getenv('RUNTIME') in ('local', 'process'):
             config.sandbox_spec = ProcessSandboxSpecServiceInjector()
         else:

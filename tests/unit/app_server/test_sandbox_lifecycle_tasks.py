@@ -1,4 +1,4 @@
-"""The lifecycle jobs, against Docker, E2B and k8s agent-sandbox.
+"""The lifecycle jobs, against Docker, E2B, k8s agent-sandbox and Maritime.
 
 The providers are the fakes from the lifecycle contract tests. The rows are
 real, and so is the row locking.
@@ -35,6 +35,7 @@ from tests.unit.app_server.test_sandbox_lifecycle_contract import (
     DockerHarness,
     E2BHarness,
     K8sHarness,
+    MaritimeHarness,
 )
 
 MINUTE = timedelta(minutes=1)
@@ -66,7 +67,7 @@ class FakeAgentServer:
         )
 
 
-@pytest.fixture(params=['docker', 'e2b', 'k8s-agent-sandbox'])
+@pytest.fixture(params=['docker', 'e2b', 'k8s-agent-sandbox', 'maritime'])
 def harness(request):
     if request.param == 'docker':
         yield DockerHarness()
@@ -76,6 +77,8 @@ def harness(request):
             yield e2b
         finally:
             e2b.close()
+    elif request.param == 'maritime':
+        yield MaritimeHarness()
     else:
         yield K8sHarness()
 

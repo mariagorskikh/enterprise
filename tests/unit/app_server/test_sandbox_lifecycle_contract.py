@@ -1,8 +1,8 @@
 """The lifecycle contract every backend that stores sandbox rows keeps.
 
 Each backend records starts, resumes and pauses on the sandbox's row, and
-locks the row for every transition. The same tests run against Docker, E2B and
-k8s agent-sandbox. The providers are faked; the rows are real.
+locks the row for every transition. The same tests run against Docker, E2B,
+k8s agent-sandbox and Maritime. The providers are faked; the rows are real.
 """
 
 import asyncio
@@ -30,6 +30,7 @@ from openhands.app_server.sandbox.sandbox_store import (
 )
 from tests.unit.app_server import test_e2b_sandbox_service as e2b_tests
 from tests.unit.app_server import test_k8s_agent_sandbox_service as k8s_tests
+from tests.unit.app_server import test_maritime_sandbox_service as maritime_tests
 
 OWNER_ID = 'user-1'
 LONG_AGO = datetime(2026, 1, 1, tzinfo=UTC)
@@ -256,7 +257,45 @@ class K8sHarness:
         return [mode for _, mode in self.k8s.modes].count('Suspended')
 
 
-@pytest.fixture(params=['docker', 'e2b', 'k8s-agent-sandbox'])
+class MaritimeHarness:
+    sandbox_id = maritime_tests.AGENT_ID
+
+    def __init__(self):
+        self.maritime = maritime_tests.FakeMaritime()
+        self.agent_server = maritime_tests.FakeAgentServer()
+
+    def service(self, db_session) -> ManagedSandboxService:
+        return maritime_tests._service(
+            db_session, self.maritime, httpx_client=self.agent_server
+        )
+
+    def row(self) -> StoredSandbox:
+        row = maritime_tests._stored()
+        row.created_at = LONG_AGO
+        return row
+
+    def set_live(self, paused: bool) -> None:
+        self.maritime.add(status='sleeping' if paused else 'active')
+        # An existing agent wakes from its snapshot already claimed.
+        self.agent_server.claimed = True
+
+    def break_transitions(self) -> None:
+        error = maritime_tests.MaritimeApiError('service unavailable', 503)
+        self.maritime.fail['start'] = error
+        self.maritime.fail['sleep'] = error
+
+    def provider_calls(self) -> int:
+        return (
+            len(self.maritime.started)
+            + len(self.maritime.slept)
+            + len(self.maritime.deleted)
+        )
+
+    def pause_calls(self) -> int:
+        return len(self.maritime.slept)
+
+
+@pytest.fixture(params=['docker', 'e2b', 'k8s-agent-sandbox', 'maritime'])
 def harness(request):
     if request.param == 'docker':
         yield DockerHarness()
@@ -266,6 +305,8 @@ def harness(request):
             yield e2b
         finally:
             e2b.close()
+    elif request.param == 'maritime':
+        yield MaritimeHarness()
     else:
         yield K8sHarness()
 
